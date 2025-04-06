@@ -1,0 +1,11 @@
+/.vscode
+/client
+/mmap1.c++
+/mmap2.c++
+/mmap_socket_client
+/receiver
+/run.sh
+/sender
+/server
+/socket-client.c++
+/socket-server.c++
