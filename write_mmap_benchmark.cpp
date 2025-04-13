@@ -7,27 +7,26 @@
 #include <sys/socket.h>
 #include <sys/un.h>
 #include <chrono>
+#include <ratio>
 
 #define SOCKET_PATH "/tmp/mysocket"
 
 int main()
 {
-    std::cout << "Host online\n";
-
+    
     const char* filePath = "/dev/shm/mmap_message";
-
-    remove(filePath);
-
+    
     int fd = open(filePath, O_CREAT | O_RDWR, 0666);
     if (fd == -1) {
         std::cerr << "Fehler beim Öffnen der Datei" << std::endl;
         return 1;
     }
-
+    
     //file size
-    const size_t filesize = 1024 * 1024 * 1024; // 1 GB
+    const size_t filesize = 1UL << 30; // 1 GB
     ftruncate(fd, filesize);
-
+    
+    sleep(5);
 
     // create Memory Mapped file
     const int offset = 0;
@@ -38,43 +37,16 @@ int main()
         return 1;
     }
 
-    // create server file descriptor for socket
-    int server_fd = socket(AF_UNIX, SOCK_STREAM, 0);
-
-    // ??
-    sockaddr_un addr{};
-    addr.sun_family = AF_UNIX;
-    std::strcpy(addr.sun_path, SOCKET_PATH);
-    unlink(SOCKET_PATH);
-
-    // bind fd to socket addr
-    bind(server_fd, (sockaddr*)&addr, sizeof(addr));
-
-    // start listening to socket, 1 connection only
-    listen(server_fd, 1);
-
-    // wait for and accept connection
-    int client_fd = accept(server_fd, nullptr, nullptr);
-
-    std::cout << "Accepted Connection\n";
-    char buf[100] = "Done";
-
     char* buffer = new char[filesize];
-    memset(buffer, 1, filesize);
+    memset(buffer, 0x69, filesize);
 
     auto start = std::chrono::high_resolution_clock::now();
+    auto start_duration = std::chrono::duration_cast<std::chrono::microseconds>(start.time_since_epoch());
+    long long start_ms = start_duration.count();
+    
     memcpy(fileMemory, buffer, filesize);
-    auto end = std::chrono::high_resolution_clock::now();
-
-    write(client_fd, buf, sizeof(buf));
-
-    std::chrono::duration<double> elapsed = end - start;
-    double bandwidth_gb = (filesize / 1e9) / elapsed.count();
-
-    std::cout << elapsed.count() << std::endl;
-    std::cout << "Write bandwidth: " << bandwidth_gb << " GB/s\n";
-
-    std::cout << "Host offline\n";
+    memset(fileMemory, 0x42, 1);
+    memcpy(fileMemory + 1, &start_ms, sizeof(start_ms));
 
     munmap(fileMemory, filesize);
     close(fd);
