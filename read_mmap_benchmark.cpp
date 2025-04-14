@@ -11,6 +11,8 @@
 
 #define SOCKET_PATH "/tmp/mysocket"
 
+#define DONE 0x42
+
 int main() {
     const char* filePath = "/dev/shm/mmap_message";
 
@@ -41,17 +43,20 @@ int main() {
 
     while (true) {
         char* ready = static_cast<char*>(fileMemory);
-        if (*ready == 0x42) { break; }
+        if (*ready == DONE) { break; }
     }
+
+	long long* offset = static_cast<long long*>(fileMemory + 8);
+
+	long long* start_value = static_cast<long long*>(fileMemory + *offset - sizeof(long long));
 
     auto end = std::chrono::high_resolution_clock::now();
     auto end_ns = std::chrono::duration_cast<std::chrono::microseconds>(end.time_since_epoch());
-    long end_value = end_ns.count();
+    long long end_value = end_ns.count();
 
-    long long* start = static_cast<long long*>(fileMemory + 1);
-    long long start_value = *start;
+	double total_time_s = (end_value - *start_value) / (1e6);
 
-    std::cout << "Bandwidth: " << end_value - start_value << "GB/s" << std::endl;
+    std::cout << "Bandwidth: " << 1.0/total_time_s << "GB/s" << std::endl;
 
     return 0;
 }
