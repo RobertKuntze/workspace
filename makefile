@@ -8,14 +8,14 @@ gdb-p1: p1-g
 gdb-p2: p2-g
 	gdb ~/workspace/p2-g
 
-p1: write_mmap_benchmark.cpp
-	g++ -o p1 write_mmap_benchmark.cpp
+p1: shm_open.cpp
+	g++ -o p1 shm_open.cpp
 
-p2: read_mmap_benchmark.cpp
-	g++ -o p2 read_mmap_benchmark.cpp
+p2: shm_open_2.cpp
+	g++ -o p2 shm_open_2.cpp
 
-p1-g: write_mmap_benchmark.cpp
-	g++ -g -o p1-g write_mmap_benchmark.cpp
+p1-g: shm_open.cpp
+	g++ -g -o p1-g shm_open.cpp
 
-p2-g: read_mmap_benchmark.cpp
-	g++ -g -o p2-g read_mmap_benchmark.cpp
+p2-g: shm_open_2.cpp
+	g++ -g -o p2-g shm_open_2.cpp
