@@ -1,7 +1,7 @@
-const long DATA_FILE_SIZE = 1UL << 30;
-const long BLOCK_SIZE = 1UL << 20;
+const unsigned long long DATA_FILE_SIZE = 1UL << 32;
+const unsigned long BLOCK_SIZE = 1UL << 20;
 
-const long HEADER_DAT_SIZE = 4096;
+const unsigned long HEADER_DAT_SIZE = 4096;
 
 struct DataAccessEntry {
 	unsigned long offset;
@@ -23,7 +23,11 @@ struct Header {
 		if (index >= HEADER_DAT_SIZE) {
 			return;
 		}
+
 		unsigned long offset = DAT[index].offset + DAT[index].size;
+		if (offset + size > DATA_FILE_SIZE) {
+			return;
+		}
 
 		memcpy(destination_file + offset, source, size);
 

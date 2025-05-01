@@ -25,15 +25,19 @@ int main ()
 		std::cerr << "shm_open Error Data" << std::endl;
 	}
 
-	ftruncate(fd_h, sizeof(Header));
-
-	ftruncate(fd_d, DATA_FILE_SIZE);
+	if (ftruncate(fd_h, sizeof(Header))) {
+		std::cerr << "ftruncate Error Header" << std::endl;
+	}
+	
+	if (ftruncate(fd_d, DATA_FILE_SIZE)) {
+		std::cerr << "ftruncate Error Data" << std::endl;
+	}
 
 	Header* header = (Header *) mmap(nullptr, sizeof(Header), PROT_READ | PROT_WRITE, MAP_SHARED, fd_h, 0);
 
 	new (header) Header();
 
-	void* data_file = mmap(nullptr, 1UL<<30, PROT_READ | PROT_WRITE, MAP_SHARED, fd_d, 0);
+	void* data_file = mmap(nullptr, DATA_FILE_SIZE, PROT_READ | PROT_WRITE, MAP_SHARED, fd_d, 0);
 	char data[BLOCK_SIZE];
 	memset(data, 0, sizeof(data));
 
@@ -41,7 +45,7 @@ int main ()
     auto start_duration = std::chrono::duration_cast<std::chrono::microseconds>(start.time_since_epoch());
     long long start_ms = start_duration.count();
 	
-	for (int i = 0; i <= (DATA_FILE_SIZE / BLOCK_SIZE) - 1; i++) {
+	for (int i = 0; i < (DATA_FILE_SIZE / BLOCK_SIZE) - 1; i++) {
 		header->sendData(data_file, &data, sizeof(data));
 	}
 
