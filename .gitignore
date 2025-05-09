@@ -14,3 +14,7 @@ p2
 p1-g
 p2-g
 shm_open
+Benchmark.o
+Connection.o
+main.o
+program

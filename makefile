@@ -1,21 +1,34 @@
-all: p1 p2
-	~/workspace/p1 &
-	~/workspace/p2
+# Compiler and base flags
+CXX := g++
+CXXFLAGS := -std=c++20 -Wall -Wextra
 
-gdb-p1: p1-g
-	gdb ~/workspace/p1-g
+# Sources and objects
+SRCS := Benchmark.cpp Connection.cpp main.cpp
+OBJS := $(SRCS:.cpp=.o)
 
-gdb-p2: p2-g
-	gdb ~/workspace/p2-g
+# Output name
+TARGET := program
 
-p1: shm_open.cpp
-	g++ -o p1 shm_open.cpp
+# Default build (optimized)
+all: CXXFLAGS += -O2
+all: $(TARGET)
 
-p2: shm_open_2.cpp
-	g++ -o p2 shm_open_2.cpp
+run: all
+	./program r &
+	./program w
 
-p1-g: shm_open.cpp
-	g++ -g -o p1-g shm_open.cpp
+# Debug build (with -g and no optimization)
+debug: CXXFLAGS += -g -O0
+debug: $(TARGET)
 
-p2-g: shm_open_2.cpp
-	g++ -g -o p2-g shm_open_2.cpp
+# Linking rule
+$(TARGET): $(OBJS)
+	$(CXX) $(CXXFLAGS) -o $@ $^
+
+# Compilation rule
+%.o: %.cpp
+	$(CXX) $(CXXFLAGS) -c $< -o $@
+
+# Clean rule
+clean:
+	rm -f $(OBJS) $(TARGET)

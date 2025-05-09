@@ -42,13 +42,13 @@ int main ()
 	memset(data, 0, sizeof(data));
 
 	auto start = std::chrono::high_resolution_clock::now();
-    auto start_duration = std::chrono::duration_cast<std::chrono::microseconds>(start.time_since_epoch());
-    long long start_ms = start_duration.count();
 	
 	for (int i = 0; i < (DATA_FILE_SIZE / BLOCK_SIZE) - 1; i++) {
 		header->sendData(data_file, &data, sizeof(data));
 	}
-
+	
+	auto start_duration = std::chrono::duration_cast<std::chrono::microseconds>(start.time_since_epoch());
+	long long start_ms = start_duration.count();
 	header->sendData(data_file, &start_ms, sizeof(start_ms));
 
 	header->status = 0x69;
