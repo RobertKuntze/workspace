@@ -20,9 +20,9 @@ void Benchmark::latencyTestSend(size_t msgSize, size_t iterations)
 	memset(data, 0, msgSize);
 
 	for (int i = 0; i < iterations; i++) {
-		con.send(data, msgSize);
 		auto time = std::chrono::high_resolution_clock::now();
-		con.send(&time, sizeof(time));
+		con.send(data, msgSize, 4);
+		con.send(&time, sizeof(time), 1);
 	}
 }
 
@@ -38,9 +38,9 @@ void Benchmark::LatencyTestReceive(size_t iterations)
 
 	while (true)
 	{
-		unsigned long offset = con.receive(i, size);
-		if (offset >= 0 && size == sizeof(send_time)) {
-			memcpy(&send_time, con.mmap_ptr+offset, size);
+		void* ptr = con.receive(i, size);
+		if (ptr && size == sizeof(send_time)) {
+			memcpy(&send_time, ptr, size);
 			auto end_time = std::chrono::high_resolution_clock::now();
 			latencies.push_back(end_time - send_time);
 			i += 2;
@@ -64,7 +64,36 @@ void Benchmark::LatencyTestReceive(size_t iterations)
 	// }
 
 	std::cout << "Total Time: " << total_time.count() / 1e9 << " seconds" << std::endl;
-	std::cout << "Bandwidth: " << 1.0 / (total_time.count() / 1e9) << " GB/s" << std::endl;
+	std::cout << "Bandwidth: " << 4.0 / (total_time.count() / 1e9) << " GB/s" << std::endl;
 
 	con.cleanup();
+}
+
+void Benchmark::sendBandwidthTest(size_t length_seconds, size_t msg_size, size_t num_threads)
+{
+	std::cout << "Starting send Bandwidth test with " << (double) msg_size / (1UL << 20) << " MB per message and " << num_threads << " threads" << std::endl;
+
+	auto start_time = std::chrono::high_resolution_clock::now();
+	auto end_time = std::chrono::high_resolution_clock::now();
+
+	MMapConnection con;
+	con.setup();
+
+	size_t iterations = 0;
+
+	char* data = new char[msg_size];
+	memset(data, 0x69, msg_size);
+
+	while (true)
+	{
+		if ((end_time - start_time).count() >= length_seconds * 1e9) {
+			break;
+		}
+		con.send(data, msg_size, num_threads);
+		iterations++;
+		end_time = std::chrono::high_resolution_clock::now();
+	}
+
+	std::cout << "Total Time: " << (end_time - start_time).count() << std::endl;
+	std::cout << "Bandwidth: " << (msg_size * iterations) / (1e9 * length_seconds) << "GB/s" << std::endl;
 }

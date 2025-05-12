@@ -13,7 +13,7 @@ TARGET := program
 all: CXXFLAGS += -O2
 all: $(TARGET)
 
-run: all
+run: debug
 	./program r &
 	./program w
 

@@ -18,3 +18,5 @@ Benchmark.o
 Connection.o
 main.o
 program
+a.out
+.gitignore
