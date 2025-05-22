@@ -9,19 +9,21 @@
 #include <numeric>
 #include <vector>
 
+extern MMapConnection* con;
+
 
 void Benchmark::latencyTestSend(size_t msgSize, size_t iterations)
 {
 	MMapConnection con;
-	con.setup();
+	con.setup(true, 8);
 	// con.initHeader();
 
-	char* data = new char[msgSize];
-	memset(data, 0, msgSize);
+	// char* data = new char[msgSize];
+	// memset(data, 0, msgSize);
 
-	for (int i = 0; i < iterations; i++) {
+	for (size_t i = 0; i < iterations; i++) {
 		auto time = std::chrono::high_resolution_clock::now();
-		con.send(data, msgSize, 4);
+		// con.send(data, msgSize, 8);
 		con.send(&time, sizeof(time), 1);
 	}
 }
@@ -29,10 +31,12 @@ void Benchmark::latencyTestSend(size_t msgSize, size_t iterations)
 void Benchmark::LatencyTestReceive(size_t iterations)
 {
 	MMapConnection con;
-	con.setup();
+	con.setup(false, 1);
+
+	std::cout << "Starting Latency Receive Test" << std::endl;
 	
-	size_t i = 2;
-	size_t size = -1;
+	size_t i = 0;
+	size_t size = 0;
 	std::chrono::_V2::high_resolution_clock::time_point send_time;
 	std::vector<std::chrono::nanoseconds> latencies;
 
@@ -48,7 +52,7 @@ void Benchmark::LatencyTestReceive(size_t iterations)
 				break;
 			}
 		}
-		size = -1;
+		size = 0;
 	}
 
 	std::chrono::nanoseconds average = std::accumulate(latencies.begin(), latencies.end(), std::chrono::nanoseconds(0)) / latencies.size();
@@ -64,9 +68,7 @@ void Benchmark::LatencyTestReceive(size_t iterations)
 	// }
 
 	std::cout << "Total Time: " << total_time.count() / 1e9 << " seconds" << std::endl;
-	std::cout << "Bandwidth: " << 4.0 / (total_time.count() / 1e9) << " GB/s" << std::endl;
-
-	con.cleanup();
+	// std::cout << "Bandwidth: " << 4.0 / (total_time.count() / 1e9) << " GB/s" << std::endl;
 }
 
 void Benchmark::sendBandwidthTest(size_t length_seconds, size_t msg_size, size_t num_threads)
@@ -75,9 +77,6 @@ void Benchmark::sendBandwidthTest(size_t length_seconds, size_t msg_size, size_t
 
 	auto start_time = std::chrono::high_resolution_clock::now();
 	auto end_time = std::chrono::high_resolution_clock::now();
-
-	MMapConnection con;
-	con.setup();
 
 	size_t iterations = 0;
 
@@ -89,11 +88,11 @@ void Benchmark::sendBandwidthTest(size_t length_seconds, size_t msg_size, size_t
 		if ((end_time - start_time).count() >= length_seconds * 1e9) {
 			break;
 		}
-		con.send(data, msg_size, num_threads);
+		con->send(data, msg_size);
 		iterations++;
 		end_time = std::chrono::high_resolution_clock::now();
 	}
 
 	std::cout << "Total Time: " << (end_time - start_time).count() << std::endl;
-	std::cout << "Bandwidth: " << (msg_size * iterations) / (1e9 * length_seconds) << "GB/s" << std::endl;
+	std::cout << "Bandwidth: " << (msg_size * iterations) / (double) (end_time - start_time).count() << "GB/s" << std::endl;
 }
