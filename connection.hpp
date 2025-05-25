@@ -10,7 +10,7 @@
 const char HEADERPATH[] = "/header";
 const char FILEPATH[] = "/file";
 const unsigned long long MMAP_FILESIZE = 1ULL << 32;
-const unsigned long HEADER_DAT_SIZE = 1UL << 12;
+const unsigned long HEADER_DAT_SIZE = 1UL << 11;
 
 struct DataAccessEntry {
 	uint64_t offset;
@@ -19,13 +19,17 @@ struct DataAccessEntry {
 
 struct Header {
 	bool status;
-	size_t index;
+	std::atomic<size_t> write_seq;
+	std::atomic<size_t> read_seq;
 	DataAccessEntry DAT[HEADER_DAT_SIZE];
+	std::atomic<bool> send_ready{false};
+	std::atomic<bool> receive_ready{false};
 
 	Header() {
 		status = 0;
-		index = 0;
-		DAT[0] = {DataAccessEntry{0,0}};
+		write_seq = 0;
+		read_seq = 0;
+		DAT[0] = {DataAccessEntry{}};
 	}
 };
 
@@ -35,7 +39,7 @@ public:
 	// virtual void send(void* data, size_t size) = 0;
 	virtual void send(void* data, size_t size, size_t num_threads) = 0;
 	virtual void send(void* data, size_t size) = 0;
-	virtual void* receive(size_t read_index, size_t& size) = 0;
+	virtual void* receive(void* receive_buffer_) = 0;
 	virtual void setup(bool cleanInit, size_t num_threads) = 0;
 	virtual void cleanup() = 0;
 	virtual ~Connection() = default;
@@ -47,9 +51,10 @@ public:
 	// void send(void* data, size_t size);
 	void send(void* data, size_t size, size_t num_threads);
 	void send(void* data, size_t size);
-	void* receive(size_t read_index, size_t& size);
+	void* receive(void* receive_buffer_);
 	void setup(bool cleanInit, size_t num_threads);
 	void initHeader();
+	// void initMMap();
 	void cleanup();
 
 	Header* header;
@@ -59,13 +64,15 @@ public:
 	int fd_h, fd;
 	size_t num_threads;
 
+	std::atomic<bool> stop_flag{false};
 	std::vector<std::unique_ptr<std::condition_variable>> cv_s;
 	std::vector<std::unique_ptr<std::condition_variable>> cv_r;
-	std::atomic<bool> stop_flag;
-	std::vector<std::unique_ptr<std::mutex>> mtx;
+	std::vector<std::unique_ptr<std::mutex>> mtx_s;
+	std::vector<std::unique_ptr<std::mutex>> mtx_r;
 	std::vector<std::unique_ptr<std::thread>> send_threads;
 	std::vector<std::unique_ptr<std::thread>> receive_threads;
 
+	std::unique_ptr<std::mutex> cout_mut = std::make_unique<std::mutex>();
 
 	std::vector<void*> data_ptrs;
 	std::vector<size_t> data_sizes;

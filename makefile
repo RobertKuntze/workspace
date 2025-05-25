@@ -1,6 +1,6 @@
 # Compiler and base flags
 CXX := g++
-CXXFLAGS := -std=c++20 -Wall -Wextra
+CXXFLAGS := -std=c++20 -Wall -Wextra -pthread -lnuma
 
 # Sources and objects
 SRCS := Benchmark.cpp Connection.cpp main.cpp

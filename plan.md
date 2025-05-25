@@ -1,0 +1,3 @@
+- bandwidth with read doing nothing
+- latency test, either variable bandwidth or no message at all?
+- write shell script that runs full benchmark, with different sizes, thread counts, durations (<-first, so i can decide on a duration for all following tests)

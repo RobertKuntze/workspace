@@ -19,4 +19,6 @@ Connection.o
 main.o
 program
 a.out
-.gitignore
+*.json
+*_results
+perf.data*

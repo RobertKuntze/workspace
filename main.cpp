@@ -18,34 +18,85 @@
 #include <string>
 #include <iostream>
 
-const size_t iter = 10240;
-size_t size = 1 << 22;
-size_t num_threads = 16;
+#include <iostream>
+#include <getopt.h>
+#include <cstdlib>
 
 MMapConnection* con = new MMapConnection();
 Benchmark bench;
 
-int main(int argc, char const *argv[])
-{
-	con->setup(true, num_threads);
+int main(int argc, char* argv[]) {
+    // Default values
+    size_t msg_size    = 1 << 25;
+    size_t num_threads  = 16;
+    size_t iterations  = 100;
+	size_t duration = 5;
+	std::string	mode;
 
-	if (argc == 1) {
-		std::cout << "no arguments" << std::endl;
-		return -1;
+
+    // Short options: m: t: i: h for help
+    const char* short_opts = "x:m:t:i:d:h";
+    // Long options array
+    const option long_opts[] = {
+		{"mode",       required_argument, nullptr, 'x'},
+        {"msg_size",   required_argument, nullptr, 'm'},
+        {"num_thread", required_argument, nullptr, 't'},
+        {"iterations", required_argument, nullptr, 'i'},
+		{"duration",   required_argument, nullptr, 'd'},
+        {"help",       no_argument,       nullptr, 'h'},
+        {nullptr,       0,                 nullptr,  0 }
+    };
+
+    // Parse command-line options
+    while (true) {
+        int opt = getopt_long(argc, argv, short_opts, long_opts, nullptr);
+        if (opt == -1)
+            break;
+
+        switch (opt) {
+			case 'x':
+				mode = optarg;
+				break;
+            case 'm':
+                msg_size   = 1 << std::stoul(optarg);
+                break;
+            case 't':
+                num_threads = std::stoul(optarg);
+                break;
+            case 'i':
+                iterations = std::stoul(optarg);
+                break;
+			case 'd':
+				duration = std::stoul(optarg);
+				break;
+            case 'h':
+            case '?':
+                std::cout << "Usage: " << argv[0]
+                          << " [--mode (s)ender|(r)eceiver] [--msg_size size exponent e.g. 20 => 2^20 ~ 1 MB] [--num_thread number of threads for sending AND receiving] [--iterations Iterations for latency test] [--duration amount of seconds for send benchmark]" << std::endl;
+                return 0;
+            default:
+                break;
+        }
+    }
+
+	if(mode == "sb") {
+		con->setup(true, num_threads);
+		bench.sendBandwidthTest(duration, msg_size);
 	}
 
-	if (!std::strcmp(argv[1], "w")) {
-		bench.latencyTestSend(size, iter);
+	if(mode == "rb") {
+		con->setup(false, num_threads);
+		bench.receiveBandwidthTest(msg_size);
 	}
 
-	if(!std::strcmp(argv[1], "b")) {
-		for (; size < 1 << 27; size *= 2) {
-			bench.sendBandwidthTest(10, size, num_threads);
-		}
+	if(mode == "sl") {
+		con->setup(true, num_threads);
+		bench.sendLatencyTest(msg_size, iterations);
 	}
 
-	if (!std::strcmp(argv[1], "r")) {
-		bench.LatencyTestReceive(iter);
+	if(mode == "rl") {
+		con->setup(false, num_threads);
+		bench.receiveLatencyTest(msg_size, iterations);
 	}
 
 	con->cleanup();

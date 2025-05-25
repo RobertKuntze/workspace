@@ -10,6 +10,8 @@
 #include <string>
 #include <thread>
 #include <sched.h>
+#include <numa.h>
+#include <numaif.h>
 
 
 void MMapConnection::setup(bool cleanInit = false, size_t num_threads_ = 1)
@@ -47,6 +49,23 @@ void MMapConnection::setup(bool cleanInit = false, size_t num_threads_ = 1)
 	if (mmap_ptr == MAP_FAILED) {
 		std::cerr << "mmap Error Data" << std::endl;
 	}
+
+	// if (cleanInit) {
+	// 	numa_tonode_memory(header, sizeof(Header), 0);
+	// 	numa_tonode_memory(mmap_ptr, MMAP_FILESIZE, 0);
+	// }
+
+	if (cleanInit) {
+		initHeader();
+
+		// int status;
+		// int ret = move_pages(0, 1, &mmap_ptr, nullptr, &status, 0);
+		// if (ret == -1) {
+		// 	perror("move_pages");
+		// }
+
+		// std::cout << "Memory is located on NUMA node: " << status << std::endl;
+	}
 	
 	close(fd);
 	close(fd_h);
@@ -54,26 +73,24 @@ void MMapConnection::setup(bool cleanInit = false, size_t num_threads_ = 1)
 	thread_send = [this](std::atomic<bool> *stop_flag, size_t thread, size_t num_thread){
 		// std::cout << "Thread " << thread << " started" << std::endl;
 		while (!stop_flag->load()) {
-			std::unique_lock<std::mutex> lock(*mtx[2*thread]);
+			std::unique_lock<std::mutex> lock(*mtx_s[thread]);
 			cv_s[thread]->wait(lock, [&] {
 				return data_ready[thread]->load() || stop_flag->load();
 			});
 			if (data_ready[thread]->load()) {
-				// std::cout << "Offsets: " << target_offsets[thread] << std::endl;
-				// std::cout << "Sizes: " << data_sizes[thread] << std::endl;
-				// std::cout << "Data: " << data_ptrs[thread] << std::endl;
 				memcpy(mmap_ptr + target_offsets[thread], data_ptrs[thread], data_sizes[thread]);
-				// std::cout << "Thread " << thread << " finished" << std::endl;
 				data_ready[thread]->store(false);
 			}
-			
 		}
+		// std::unique_lock<std::mutex> lock(*cout_mut);
+		// std::cout << sched_getcpu() << ",";
+		// lock.unlock();
 		// std::cout << "Thread " << thread << " running on  CPU " << sched_getcpu() << std::endl;
 	};
 
 	thread_receive = [this](std::atomic<bool> *stop_flag, size_t thread, size_t num_thread){
 		while (!stop_flag->load()) {
-			std::unique_lock<std::mutex> lock(*mtx[2*thread + 1]);
+			std::unique_lock<std::mutex> lock(*mtx_r[thread]);
 			cv_r[thread]->wait(lock, [&]{
 				return receive_ready[thread]->load() || stop_flag->load();
 			});
@@ -82,51 +99,72 @@ void MMapConnection::setup(bool cleanInit = false, size_t num_threads_ = 1)
 				receive_ready[thread]->store(false);
 			}
 		}
+		// std::unique_lock<std::mutex> lock(*cout_mut);
+		// std::cout << sched_getcpu() << ",";
+		// lock.unlock();
 	};
 
-	data_ptrs.resize(num_threads);
-	data_sizes.resize(num_threads);
-	target_offsets.resize(num_threads);
+	// data_ptrs.resize(num_threads);
+	// data_sizes.resize(num_threads);
+	// target_offsets.resize(num_threads);
+	// receive_ptrs.resize(num_threads);
+	// receive_sizes.resize(num_threads);
+	// receive_offsets.resize(num_threads);
+	cv_s.reserve(num_threads);
+	cv_r.reserve(num_threads);
 	// send_threads.reserve(num_threads);
 	// mtx.reserve(num_threads);
-	stop_flag = false;
 
 	cpu_set_t cpuset;
 
 	for (size_t i = 0; i < num_threads; i++)
 	{
-		mtx.emplace_back(std::make_unique<std::mutex>());
-		mtx.emplace_back(std::make_unique<std::mutex>());
+		mtx_s.emplace_back(std::make_unique<std::mutex>());
+		mtx_r.emplace_back(std::make_unique<std::mutex>());
 		cv_s.emplace_back(std::make_unique<std::condition_variable>());
 		cv_r.emplace_back(std::make_unique<std::condition_variable>());
 		data_ready.emplace_back(std::make_unique<std::atomic<bool>>(false));
 		receive_ready.emplace_back(std::make_unique<std::atomic<bool>>(false));
-		target_offsets[i] = 0;
-		data_ptrs[i] = nullptr;
-		data_sizes[i] = 0;
-		send_threads.emplace_back(std::make_unique<std::thread>(thread_send, &stop_flag, i, num_threads));
-		// receive_threads.emplace_back(std::make_unique<std::thread>(thread_receive, &stop_flag, i, num_threads));
-		CPU_ZERO(&cpuset);
-		CPU_SET(i+64, &cpuset);
-		if (pthread_setaffinity_np(send_threads.back()->native_handle(), sizeof(cpu_set_t), &cpuset) != 0) { std::cout << "pthread set affinity failed" << std::endl; }
+		data_ptrs.emplace_back(nullptr);
+		data_sizes.emplace_back(0);
+		receive_ptrs.emplace_back(0);
+		receive_sizes.emplace_back(0);
+		receive_offsets.emplace_back(0);
+		target_offsets.emplace_back(0);
 		// CPU_ZERO(&cpuset);
-		// CPU_SET(i + 16, &cpuset);
+		// CPU_SET(i, &cpuset);
+		// if (pthread_setaffinity_np(send_threads.back()->native_handle(), sizeof(cpu_set_t), &cpuset) != 0) { std::cout << "pthread set affinity failed" << std::endl; }
+		// CPU_ZERO(&cpuset);
+		// CPU_SET(i + 64, &cpuset);
 		// if (pthread_setaffinity_np(receive_threads.back()->native_handle(), sizeof(cpu_set_t), &cpuset) != 0) { std::cout << "pthread set affinity failed" << std::endl; }
+	}
+
+	for (size_t i = 0; i < num_threads; i++) {
+		send_threads.emplace_back(std::make_unique<std::thread>(thread_send, &stop_flag, i, num_threads));
+		receive_threads.emplace_back(std::make_unique<std::thread>(thread_receive, &stop_flag, i, num_threads));
 	}
 }
 
 void MMapConnection::initHeader()
 {
-	new (header) Header();
+	new (header) Header{};
 }
 
 void MMapConnection::cleanup()
 {
 	stop_flag = true;
+	// std::cout << "\"send_cpus\" : [";
 	for (size_t i = 0; i < cv_s.size(); i++) {
 		cv_s[i]->notify_all();
-		cv_r[i]->notify_all();
+		send_threads[i]->join();
 	}
+	// std::cout << "]," << std::endl;
+	// std::cout << "\"receive_cpus\" : [";
+	for (size_t i = 0; i < cv_r.size(); i++) {
+		cv_r[i]->notify_all();
+		receive_threads[i]->join();
+	}
+	// std::cout << "]," << std::endl;
 	munmap(header, sizeof(Header));
 	munmap(mmap_ptr, MMAP_FILESIZE);
 }
@@ -174,24 +212,34 @@ void MMapConnection::send(void* data, size_t size, size_t num_threads = 1)
 
 void MMapConnection::send(void* data, size_t size)
 {
-	if (size % send_threads.size() != 0) {
-		std::cerr << "Data size is not divisible by number of threads" << std::endl;
-		return;
+	while ((header->write_seq.load() + 1) % HEADER_DAT_SIZE == header->read_seq.load() % HEADER_DAT_SIZE) {}
+	uint64_t offset;
+	
+	if (header->write_seq.load() % HEADER_DAT_SIZE == 0) {
+		offset = 0;
+	} else {
+		offset = header->DAT[(header->write_seq.load() - 1) % HEADER_DAT_SIZE].offset + header->DAT[(header->write_seq.load() - 1) % HEADER_DAT_SIZE].size;
 	}
-
-	uint64_t offset = header->DAT[header->index].offset + header->DAT[header->index].size;
 
 	if (offset + size > MMAP_FILESIZE) {
 		// std::cerr << "Filesize exceeded" << std::endl;
-		header->index = 0;
 		offset = 0;
 	}
 
+	size_t thread_size = size / num_threads;
+	size_t remainder = size % num_threads;
+
 	for (size_t i = 0; i < num_threads; i++) {
-		data_ptrs[i] = data + (i * size / num_threads);
-		data_sizes[i] = size / num_threads;
-		target_offsets[i] = offset + i * (size / num_threads);
-		std::unique_lock<std::mutex> lock(*mtx[i]);
+		if (i == 0) {
+			data_ptrs[i] = data + (i * (thread_size + remainder));
+			data_sizes[i] = thread_size + remainder;
+			target_offsets[i] = offset + i * (thread_size + remainder);
+		} else {
+			data_ptrs[i] = data + (i * thread_size);
+			data_sizes[i] = thread_size;
+			target_offsets[i] = offset + i * (thread_size);
+		}
+		std::unique_lock<std::mutex> lock(*mtx_s[i]);
 		data_ready[i]->store(true);
 		cv_s[i]->notify_one();
 		lock.unlock();
@@ -211,24 +259,22 @@ void MMapConnection::send(void* data, size_t size)
 		}
 	}
 
-	header->index++;
-	header->DAT[header->index] = DataAccessEntry{offset, size};
-	if (header->index >= HEADER_DAT_SIZE) {
-		header->index = 0;
-	}
+	header->DAT[header->write_seq.load() % HEADER_DAT_SIZE] = DataAccessEntry{offset, size};
+	header->write_seq.fetch_add(1);
+	// std::cout << "Header seq: " << header->seq << std::endl;
 }
 
-void* MMapConnection::receive(size_t read_index, size_t& size)
+void* MMapConnection::receive(void* receive_buffer_)
 {	
-	DataAccessEntry cur = header->DAT[read_index];
+	receive_buffer = (char*) receive_buffer_;
 
-	receive_buffer = new char[cur.size];
+	DataAccessEntry cur = header->DAT[header->read_seq.load() % HEADER_DAT_SIZE];
 
 	for (size_t i = 0; i < num_threads; i++) {
-		receive_ptrs[i] = cur.offset + (i * size / num_threads);
+		receive_ptrs[i] = cur.offset + (i * cur.size / num_threads);
 		receive_sizes[i] = cur.size / num_threads;
-		receive_offsets[i] = (i * size / num_threads);
-		std::unique_lock<std::mutex> lock(*mtx[i+num_threads]);
+		receive_offsets[i] = (i * cur.size / num_threads);
+		std::unique_lock<std::mutex> lock(*mtx_r[i]);
 		receive_ready[i]->store(true);
 		cv_r[i]->notify_one();
 		lock.unlock();
@@ -248,5 +294,6 @@ void* MMapConnection::receive(size_t read_index, size_t& size)
 		}
 	}
 
-	return &receive_buffer;
+	header->read_seq.fetch_add(1);
+	return receive_buffer;
 }
