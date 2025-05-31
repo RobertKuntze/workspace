@@ -1,5 +1,5 @@
-sendfile="numa_thread_send_25.json"
-receivefile="numa_thread_receive_25.json"
+sendfile="data/numa_thread_send_22.json"
+receivefile="data/numa_thread_receive_22.json"
 
 echo "[" > $sendfile
 echo "[" > $receivefile
@@ -8,10 +8,10 @@ for i in {1..16}
 do
 	for j in {1..10}
 	do
-		echo "Run: numactl --cpunodebind=0 --membind=0 ./program --mode s --num_thread $i --duration 30 --msg_size 25 >> $sendfile &"
-		numactl --cpunodebind=0 --membind=0 ./program --mode s --num_thread $i --duration 30 --msg_size 25 >> $sendfile &
-		# echo "Run: numactl --cpunodebind=0 --membind=0 ./program --mode r --num_thread $i --duration 30 --msg_size 25 >> $receivefile"
-		numactl --cpunodebind=0 --membind=0 ./program --mode r --num_thread $i --duration 30 --msg_size 25 >> $receivefile
+		echo "Run: numactl --cpunodebind=0 --membind=0 ./program --mode sb --num_thread $i --duration 30 --msg_size 22 >> $sendfile &"
+		numactl --cpunodebind=0 --membind=0 ./program --mode sb --num_thread $i --duration 30 --msg_size 22 >> $sendfile &
+		# echo "Run: numactl --cpunodebind=0 --membind=0 ./program --mode rb --num_thread $i --duration 30 --msg_size 22 >> $receivefile"
+		numactl --cpunodebind=0 --membind=0 ./program --mode rb --num_thread $i --duration 30 --msg_size 22 >> $receivefile
 		echo "Done"
 		date +%H:%M:%S
 		sleep 1
@@ -20,8 +20,8 @@ done
 echo "]" >> $sendfile
 echo "]" >> $receivefile
 
-sendfile="nonuma_thread_send_25.json"
-receivefile="nonuma_thread_receive_25.json"
+sendfile="data/nonuma_thread_send_22.json"
+receivefile="data/nonuma_thread_receive_22.json"
 
 echo "[" > $sendfile
 echo "[" > $receivefile
@@ -30,10 +30,10 @@ for i in {1..16}
 do
 	for j in {1..10}
 	do
-		echo "Run: ./program --mode s --num_thread $i --duration 30 --msg_size 25 >> $sendfile &"
-		./program --mode s --num_thread $i --duration 30 --msg_size 25 >> $sendfile &
-		# echo "Run: ./program --mode r --num_thread $i --duration 30 --msg_size 25 >> $receivefile"
-		./program --mode r --num_thread $i --duration 30 --msg_size 25 >> $receivefile
+		echo "Run: ./program --mode sb --num_thread $i --duration 30 --msg_size 22 >> $sendfile &"
+		./program --mode sb --num_thread $i --duration 30 --msg_size 22 >> $sendfile &
+		# echo "Run: ./program --mode rb --num_thread $i --duration 30 --msg_size 22 >> $receivefile"
+		./program --mode rb --num_thread $i --duration 30 --msg_size 22 >> $receivefile
 		echo "Done"
 		date +%H:%M:%S
 		sleep 1

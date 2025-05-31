@@ -21,4 +21,7 @@ program
 a.out
 *.json
 *_results
-perf.data*
+perf*
+*test*
+*.png
+/data

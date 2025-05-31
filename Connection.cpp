@@ -131,17 +131,21 @@ void MMapConnection::setup(bool cleanInit = false, size_t num_threads_ = 1)
 		receive_sizes.emplace_back(0);
 		receive_offsets.emplace_back(0);
 		target_offsets.emplace_back(0);
-		// CPU_ZERO(&cpuset);
-		// CPU_SET(i, &cpuset);
-		// if (pthread_setaffinity_np(send_threads.back()->native_handle(), sizeof(cpu_set_t), &cpuset) != 0) { std::cout << "pthread set affinity failed" << std::endl; }
-		// CPU_ZERO(&cpuset);
-		// CPU_SET(i + 64, &cpuset);
-		// if (pthread_setaffinity_np(receive_threads.back()->native_handle(), sizeof(cpu_set_t), &cpuset) != 0) { std::cout << "pthread set affinity failed" << std::endl; }
 	}
 
+	size_t cpu_binds[16] = {0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15};
+	
 	for (size_t i = 0; i < num_threads; i++) {
 		send_threads.emplace_back(std::make_unique<std::thread>(thread_send, &stop_flag, i, num_threads));
 		receive_threads.emplace_back(std::make_unique<std::thread>(thread_receive, &stop_flag, i, num_threads));
+		
+		CPU_ZERO(&cpuset);
+		CPU_SET(cpu_binds[i], &cpuset);
+		if (pthread_setaffinity_np(send_threads.back()->native_handle(), sizeof(cpu_set_t), &cpuset) != 0) { std::cout << "pthread set affinity failed" << std::endl; }
+		
+		CPU_ZERO(&cpuset);
+		CPU_SET(cpu_binds[i+8], &cpuset);
+		if (pthread_setaffinity_np(receive_threads.back()->native_handle(), sizeof(cpu_set_t), &cpuset) != 0) { std::cout << "pthread set affinity failed" << std::endl; }
 	}
 }
 
@@ -212,6 +216,9 @@ void MMapConnection::send(void* data, size_t size, size_t num_threads = 1)
 
 void MMapConnection::send(void* data, size_t size)
 {
+	if ((header->write_seq.load() + 1) % HEADER_DAT_SIZE == header->read_seq.load() % HEADER_DAT_SIZE) {
+		// std::cout << "writer cought up with reader" << std::endl;
+	}
 	while ((header->write_seq.load() + 1) % HEADER_DAT_SIZE == header->read_seq.load() % HEADER_DAT_SIZE) {}
 	uint64_t offset;
 	

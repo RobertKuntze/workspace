@@ -27,19 +27,21 @@ Benchmark bench;
 
 int main(int argc, char* argv[]) {
     // Default values
-    size_t msg_size    = 1 << 25;
-    size_t num_threads  = 16;
+    size_t msg_size    = 1 << 22;
+	uint64_t total_size = 1ULL << 30;
+    size_t num_threads  = 8;
     size_t iterations  = 100;
 	size_t duration = 5;
 	std::string	mode;
 
 
     // Short options: m: t: i: h for help
-    const char* short_opts = "x:m:t:i:d:h";
+    const char* short_opts = "x:m:t:i:d:h:s";
     // Long options array
     const option long_opts[] = {
 		{"mode",       required_argument, nullptr, 'x'},
-        {"msg_size",   required_argument, nullptr, 'm'},
+        {"msg-size",   required_argument, nullptr, 'm'},
+		{"total-size", required_argument, nullptr, 's'},
         {"num_thread", required_argument, nullptr, 't'},
         {"iterations", required_argument, nullptr, 'i'},
 		{"duration",   required_argument, nullptr, 'd'},
@@ -60,6 +62,9 @@ int main(int argc, char* argv[]) {
             case 'm':
                 msg_size   = 1 << std::stoul(optarg);
                 break;
+			case 's':
+				total_size = 1 << std::stoul(optarg);
+				break;
             case 't':
                 num_threads = std::stoul(optarg);
                 break;
@@ -82,6 +87,11 @@ int main(int argc, char* argv[]) {
 	if(mode == "sb") {
 		con->setup(true, num_threads);
 		bench.sendBandwidthTest(duration, msg_size);
+	}
+
+	if(mode == "sbt") {
+		con->setup(true, num_threads);
+		bench.sendBandwidthTotalSizeTest(msg_size, total_size);
 	}
 
 	if(mode == "rb") {
