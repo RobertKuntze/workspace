@@ -42,7 +42,7 @@ int main(int argc, char* argv[]) {
 		{"mode",       required_argument, nullptr, 'x'},
         {"msg-size",   required_argument, nullptr, 'm'},
 		{"total-size", required_argument, nullptr, 's'},
-        {"num_thread", required_argument, nullptr, 't'},
+        {"threads",    required_argument, nullptr, 't'},
         {"iterations", required_argument, nullptr, 'i'},
 		{"duration",   required_argument, nullptr, 'd'},
         {"help",       no_argument,       nullptr, 'h'},
@@ -63,7 +63,7 @@ int main(int argc, char* argv[]) {
                 msg_size   = 1 << std::stoul(optarg);
                 break;
 			case 's':
-				total_size = 1 << std::stoul(optarg);
+				total_size = 1 << std::stoull(optarg);
 				break;
             case 't':
                 num_threads = std::stoul(optarg);

@@ -8,7 +8,7 @@
 #include <functional>
 
 const char HEADERPATH[] = "/header";
-const char FILEPATH[] = "/file";
+const char FILEPATH[] = "/data";
 const unsigned long long MMAP_FILESIZE = 1ULL << 33;
 const unsigned long HEADER_DAT_SIZE = 1UL << 8;
 

@@ -146,6 +146,7 @@ void Benchmark::sendLatencyTest(size_t msg_size, size_t iterations)
 
 	con->send(t1.data(), iterations * sizeof(std::chrono::steady_clock::time_point));
 	con->send(t2.data(), iterations * sizeof(std::chrono::steady_clock::time_point));
+	// einfach hier ausgeben
 
 	con->header->send_ready.store(false);
 	while (con->header->receive_ready.load()) {};
@@ -233,12 +234,12 @@ void Benchmark::sendBandwidthTotalSizeTest(size_t msg_size, uint64_t total_size)
     std::mt19937_64 gen(seed);
     std::uniform_int_distribution<uint64_t> dis;
 
-    for (size_t i = 0; i < total_size / msg_size; ++i) {
+    for (size_t i = 0; i < data_size; ++i) {
         data[i] = dis(gen);
     }
 
 	auto start_time = std::chrono::steady_clock::now();
-	for (uint64_t i = 0; i <= total_size; i += msg_size){
+	for (uint64_t i = 0; i < total_size; i += msg_size){
 		con->send(data, msg_size);
 	}
 	auto end_time = std::chrono::steady_clock::now();

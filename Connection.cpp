@@ -232,9 +232,14 @@ void MMapConnection::send(void* data, size_t size)
 		// std::cerr << "Filesize exceeded" << std::endl;
 		offset = 0;
 	}
-
 	size_t thread_size = size / num_threads;
 	size_t remainder = size % num_threads;
+
+	if (size < num_threads * 64) {
+		memcpy(mmap_ptr + offset, data, size);
+		goto done;
+	}
+
 
 	for (size_t i = 0; i < num_threads; i++) {
 		if (i == 0) {
@@ -265,6 +270,8 @@ void MMapConnection::send(void* data, size_t size)
 			break;
 		}
 	}
+
+done:
 
 	header->DAT[header->write_seq.load() % HEADER_DAT_SIZE] = DataAccessEntry{offset, size};
 	header->write_seq.fetch_add(1);
