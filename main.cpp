@@ -24,22 +24,24 @@
 
 MMapConnection* con = new MMapConnection();
 Benchmark bench;
+size_t PACKET_SIZE = 1UL << 18;
 
 int main(int argc, char* argv[]) {
     // Default values
     size_t msg_size    = 1 << 22;
 	uint64_t total_size = 1ULL << 30;
-    size_t num_threads  = 8;
+    size_t num_threads  = 7;
     size_t iterations  = 100;
 	size_t duration = 5;
 	std::string	mode;
 
 
     // Short options: m: t: i: h for help
-    const char* short_opts = "x:m:t:i:d:h:s";
+    const char* short_opts = "x:m:t:i:d:h:s:p";
     // Long options array
     const option long_opts[] = {
 		{"mode",       required_argument, nullptr, 'x'},
+		{"packet-size",required_argument, nullptr, 'p'},
         {"msg-size",   required_argument, nullptr, 'm'},
 		{"total-size", required_argument, nullptr, 's'},
         {"threads",    required_argument, nullptr, 't'},
@@ -60,10 +62,13 @@ int main(int argc, char* argv[]) {
 				mode = optarg;
 				break;
             case 'm':
-                msg_size   = 1 << std::stoul(optarg);
+                msg_size   = 1UL << std::stoul(optarg);
+                break;
+			case 'p':
+                PACKET_SIZE = 1UL << std::stoul(optarg);
                 break;
 			case 's':
-				total_size = 1 << std::stoull(optarg);
+				total_size = 1ULL << std::stoull(optarg);
 				break;
             case 't':
                 num_threads = std::stoul(optarg);

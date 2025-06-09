@@ -6,6 +6,7 @@
 #include <mutex>
 #include <atomic>
 #include <functional>
+#include <queue>
 
 const char HEADERPATH[] = "/header";
 const char FILEPATH[] = "/data";
@@ -15,6 +16,7 @@ const unsigned long HEADER_DAT_SIZE = 1UL << 8;
 struct DataAccessEntry {
 	uint64_t offset;
 	uint64_t size;
+	bool ready;
 };
 
 struct Header {
@@ -29,8 +31,15 @@ struct Header {
 		status = 0;
 		write_seq = 0;
 		read_seq = 0;
-		DAT[0] = {DataAccessEntry{}};
+		DAT[0] = {0,0,false};
 	}
+};
+
+struct Task {
+	void* destination;
+	void* source;
+	uint64_t size;
+	size_t seq;
 };
 
 class Connection
@@ -56,6 +65,9 @@ public:
 	void initHeader();
 	// void initMMap();
 	void cleanup();
+
+	void completeMessage();
+	void completeAllMessages();
 
 	Header* header;
 	void* mmap_ptr;
@@ -86,8 +98,13 @@ public:
 	
 	char* receive_buffer;
 
-	std::function<void(std::atomic<bool> *, size_t thread, size_t num_threads)> thread_send;
-	std::function<void(std::atomic<bool> *, size_t thread, size_t num_threads)> thread_receive;
+	std::queue<Task> task_queue;
+	std::mutex queue_mtx;
+
+	size_t local_write_seq;
+	size_t local_read_seq;
+
+	std::function<void(std::atomic<bool> *, size_t num_threads)> thread_worker;
 
 };
 

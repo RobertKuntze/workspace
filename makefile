@@ -10,7 +10,7 @@ OBJS := $(SRCS:.cpp=.o)
 TARGET := program
 
 # Default build (optimized)
-all: CXXFLAGS += -O2
+all: CXXFLAGS += -O3
 all: $(TARGET)
 
 run: debug

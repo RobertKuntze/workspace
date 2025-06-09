@@ -52,6 +52,8 @@ void Benchmark::sendBandwidthTest(size_t length_seconds, size_t msg_size)
 		iterations++;
 		end_time = std::chrono::steady_clock::now();
 	}
+	con->completeAllMessages();
+	end_time = std::chrono::steady_clock::now();
 	
 	con->header->send_ready.store(false);
 
@@ -242,6 +244,7 @@ void Benchmark::sendBandwidthTotalSizeTest(size_t msg_size, uint64_t total_size)
 	for (uint64_t i = 0; i < total_size; i += msg_size){
 		con->send(data, msg_size);
 	}
+	con->completeAllMessages();
 	auto end_time = std::chrono::steady_clock::now();
 	
 	con->header->send_ready.store(false);
