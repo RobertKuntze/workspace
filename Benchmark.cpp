@@ -84,17 +84,17 @@ void Benchmark::receiveBandwidthTest(size_t msg_size)
 
 	char* receive_Buffer = new char[msg_size];
 	
-	size_t data_size = msg_size / 8;
-	uint64_t* data = new uint64_t[data_size];
-	// memset(data, 0x69, msg_size);
+	// size_t data_size = msg_size / 8;
+	// uint64_t* data = new uint64_t[data_size];
+	// // memset(data, 0x69, msg_size);
 
-    std::mt19937_64 gen(seed);
-    std::uniform_int_distribution<uint64_t> dis;
+    // std::mt19937_64 gen(seed);
+    // std::uniform_int_distribution<uint64_t> dis;
 
-    for (size_t i = 0; i < data_size; ++i) {
-        data[i] = dis(gen);
-		std::cout << data[i] << std::endl;
-    }
+    // for (size_t i = 0; i < data_size; ++i) {
+    //     data[i] = dis(gen);
+	// 	std::cout << data[i] << std::endl;
+    // }
 
 	size_t iterations = 0;
 	
@@ -103,9 +103,9 @@ void Benchmark::receiveBandwidthTest(size_t msg_size)
 	{
 		if (con->header->read_seq.load() != con->header->write_seq) {
 			con->receive(receive_Buffer);
-			if(memcmp(data, receive_Buffer, msg_size) != 0) {
-				std::cout << "RECEIVE ERROR" << std::endl;
-			}
+			// if(memcmp(data, receive_Buffer, msg_size) != 0) {
+			// 	std::cout << "RECEIVE ERROR" << std::endl;
+			// }
 			iterations++;
 		} else {
 			if (!con->header->send_ready.load()) {
