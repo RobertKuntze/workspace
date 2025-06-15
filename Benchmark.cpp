@@ -13,6 +13,7 @@
 size_t seed = 6969420;
 
 extern MMapConnection* con;
+extern size_t PACKET_SIZE;
 
 void Benchmark::sendBandwidthTest(size_t length_seconds, size_t msg_size)
 {
@@ -102,7 +103,7 @@ void Benchmark::receiveBandwidthTest(size_t msg_size)
 	auto start_time = std::chrono::steady_clock::now();
 	while (true)
 	{
-		if (con->header->read_seq.load() != con->header->write_seq) {
+		if (con->header->read_seq.load() < con->header->write_seq.load() && con->header->read_seq.load() % HEADER_DAT_SIZE != con->header->write_seq.load() % HEADER_DAT_SIZE) {
 			con->receive(receive_Buffer);
 			// if(memcmp(data, receive_Buffer, msg_size) != 0) {
 			// 	std::cout << "RECEIVE ERROR" << std::endl;
@@ -128,10 +129,26 @@ void Benchmark::receiveBandwidthTest(size_t msg_size)
 	con->header->receive_ready.store(false);
 }
 
+void printvector(const std::vector<std::chrono::steady_clock::time_point>& vec) {
+	std::cout << " [";
+	for (size_t i = 0; i < vec.size(); ++i) {
+		std::cout << vec[i].time_since_epoch().count();
+		if (i != vec.size() - 1)
+			std::cout << ",";
+	}
+	std::cout << "]";
+}
 void Benchmark::sendLatencyTest(size_t msg_size, size_t iterations)
 {
 	con->initHeader();
 	char* data = new char[msg_size];
+
+	std::cout << "{\n";
+	std::cout << "  \"type\": \"send_latency\",\n";
+	std::cout << "  \"size\": " << msg_size <<  ",\n";
+	std::cout << "  \"threads\": " << con->num_threads <<  ",\n";
+	std::cout << "  \"packet size\": " << PACKET_SIZE <<  ",\n";
+	
 
 	std::vector<std::chrono::steady_clock::time_point> t1;
 	std::vector<std::chrono::steady_clock::time_point> t2;
@@ -145,24 +162,21 @@ void Benchmark::sendLatencyTest(size_t msg_size, size_t iterations)
 		con->send(data, msg_size);
 		t2.emplace_back(std::chrono::steady_clock::now());
 	}
+	con->completeAllMessages();
 
-	con->send(t1.data(), iterations * sizeof(std::chrono::steady_clock::time_point));
-	con->send(t2.data(), iterations * sizeof(std::chrono::steady_clock::time_point));
 	// einfach hier ausgeben
+	std::cout << "  \"t1\": ";
+	printvector(t1);
+	std::cout << ",\n";
+	std::cout << "  \"t2\": ";
+	printvector(t2);
+
+	std::cout << "}\n";
 
 	con->header->send_ready.store(false);
 	while (con->header->receive_ready.load()) {};
 }
 
-void printvector(const std::vector<std::chrono::steady_clock::time_point>& vec) {
-	std::cout << " [";
-	for (size_t i = 0; i < vec.size(); ++i) {
-		std::cout << vec[i].time_since_epoch().count();
-		if (i != vec.size() - 1)
-			std::cout << ",";
-	}
-	std::cout << "]";
-}
 
 void Benchmark::receiveLatencyTest(size_t msg_size, size_t iterations)
 {
@@ -186,23 +200,7 @@ void Benchmark::receiveLatencyTest(size_t msg_size, size_t iterations)
 		t4.emplace_back(std::chrono::steady_clock::now());
 	}
 
-	std::vector<std::chrono::steady_clock::time_point> t1;
-	std::vector<std::chrono::steady_clock::time_point> t2;
 
-	t1.resize(iterations);
-	t2.resize(iterations);
-
-	while (con->header->read_seq.load() == con->header->write_seq) {}
-	con->receive(t1.data());
-	while (con->header->read_seq.load() == con->header->write_seq) {}
-	con->receive(t2.data());
-
-	std::cout << "  \"t1\": ";
-	printvector(t1);
-	std::cout << ",\n";
-	std::cout << "  \"t2\": ";
-	printvector(t2);
-	std::cout << ",\n";
 	std::cout << "  \"t3\": ";
 	printvector(t3);
 	std::cout << ",\n";
