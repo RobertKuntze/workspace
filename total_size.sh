@@ -28,34 +28,28 @@
 # for i in {}
 # echo "]" >> $sendfile
 # echo "]" >> $receivefile
-sendfile="data/numa_both_send_total.json"
-receivefile="data/numa_both_receive_total.json"
+sendfile="data/packet-size_send.json"
+receivefile="data/packet-size_receive.json"
 
 echo "[" > $sendfile
 echo "[" > $receivefile
 
-for i in $(seq 10 30)
+for i in $(seq 10 22)
 do
-	for j in $(seq 1 10)
-	do
-		echo "Run: numactl --membind=0 ./program --mode sbt --msg-size $i --total-size 30 --threads 7 >> $sendfile &"
-		numactl --membind=0 ./program --mode sbt --msg-size $i --total-size 30 --threads 7 >> $sendfile &
-		pid=$!
-		# echo "Run: numactl --cpunodebind=0 --membind=0 ./program --mode r --msg-size $j --total-size $i --threads 7 >> $receivefile"
-		numactl --membind=0 ./program --mode rb --msg-size $i --total-size 30 --threads 7 >> $receivefile
-		wait $pid
-		if [ "$i" -ne 30 ] || [ "$j" -ne 10 ]; then
-            echo "," >> "$receivefile"
-            echo "," >> "$sendfile"
-        fi
-		echo "Done"
-		date +%H:%M:%S
-	done
+	echo "Run numactl --membind=0 ./program --mode sbt --msg-size 22 --packet-size $i >> $sendfile &"
+	numactl --membind=0 ./program --mode sbt --msg-size 22 --packet-size $i >> $sendfile &
+	pid=$!
+	numactl --membind=0 ./program --mode rb --msg-size 22 --packet-size $i >> $receivefile
+	wait $pid
+	if [ "$i" -ne 22 ]; then
+		echo "," >> "$sendfile"
+		echo "," >> "$receivefile"
+	fi
 done
 
-for i in {}
 echo "]" >> $sendfile
 echo "]" >> $receivefile
+
 # sendfile="nonuma_both_send_8gb.json"
 # receivefile="nonuma_both_receive_8gb.json"
 

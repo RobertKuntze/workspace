@@ -51,6 +51,8 @@ void MMapConnection::setup(bool cleanInit = false, size_t num_threads_ = 1)
 		std::cerr << "mmap Error Data" << std::endl;
 	}
 
+	// madvise(mmap_ptr, MMAP_FILESIZE, MADV_WILLNEED | MADV_HUGEPAGE);
+
 	// if (cleanInit) {
 	// 	numa_tonode_memory(header, sizeof(Header), 0);
 	// 	numa_tonode_memory(mmap_ptr, MMAP_FILESIZE, 0);

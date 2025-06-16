@@ -10,8 +10,8 @@
 
 const char HEADERPATH[] = "/header";
 const char FILEPATH[] = "/data";
-const unsigned long long MMAP_FILESIZE = 1ULL << 33;
-const unsigned long HEADER_DAT_SIZE = 1UL << 8;
+const unsigned long long MMAP_FILESIZE = 1ULL << 24;
+const unsigned long HEADER_DAT_SIZE = 1UL << 7;
 
 struct DataAccessEntry {
 	uint64_t offset;
