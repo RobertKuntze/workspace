@@ -9,5 +9,5 @@ public:
 	void receiveBandwidthTest(size_t msg_size);
 	void sendLatencyTest(size_t msg_size, size_t iterations);
 	void receiveLatencyTest(size_t msg_size, size_t iterations);
-	void sendBandwidthTotalSizeTest(size_t msg_size, uint64_t total_size);
+	void sendBandwidthTotalSizeTest(uint64_t total_size);
 };

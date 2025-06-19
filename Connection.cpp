@@ -34,13 +34,13 @@ void MMapConnection::setup(bool cleanInit = false, size_t num_threads_ = 1)
 	}
 
 	if (cleanInit) { ftruncate(fd, 0); }
-	if (ftruncate(fd, MMAP_FILESIZE)) {
+	if (ftruncate(fd, MMAP_SIZE_PER_THREAD * num_threads)) {
 		std::cerr << "ftruncate Error Data" << std::endl;
 	}
 
 	header = (Header*) mmap(nullptr, sizeof(Header), PROT_READ | PROT_WRITE, MAP_SHARED, fd_h, 0);
 
-	mmap_ptr = mmap(nullptr, MMAP_FILESIZE, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
+	mmap_ptr = mmap(nullptr, MMAP_SIZE_PER_THREAD * num_threads, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
 
 	// sleep(1);
 
@@ -61,6 +61,11 @@ void MMapConnection::setup(bool cleanInit = false, size_t num_threads_ = 1)
 	if (cleanInit) {
 		initHeader();
 
+		for (size_t i = 1; i <= num_threads; i++) {
+			Thread_Footer* footer = (Thread_Footer*) (mmap_ptr + (MMAP_SIZE_PER_THREAD * i)) - 1;
+			new (footer) Thread_Footer;
+		}
+
 		// int status;
 		// int ret = move_pages(0, 1, &mmap_ptr, nullptr, &status, 0);
 		// if (ret == -1) {
@@ -73,22 +78,53 @@ void MMapConnection::setup(bool cleanInit = false, size_t num_threads_ = 1)
 	close(fd);
 	close(fd_h);
 
-	thread_worker = [this](std::atomic<bool> *stop_flag, size_t num_thread){
+	thread_send = [this](std::atomic<bool> *stop_flag, size_t id){
 		// std::cout << "Thread " << thread << " started" << std::endl;
+		void* target_data = mmap_ptr + (MMAP_SIZE_PER_THREAD * num_threads);
+		Thread_Footer* footer = (Thread_Footer*) (mmap_ptr + (MMAP_SIZE_PER_THREAD * (num_threads+1)) - sizeof(Thread_Footer));
+		// new (footer) Thread_Footer;
 		while (!stop_flag->load()) {
-			if (!task_queue.empty()) {
-				std::unique_lock lock(queue_mtx);
-				if (task_queue.empty()) { continue; }
-				Task task = task_queue.front();
-				task_queue.pop();
-				lock.unlock();
-				memcpy(task.destination, task.source, task.size);
+			std::unique_lock lock(queue_mtx);
+			queue_cv.wait(lock);
+			if (task_queue.empty()) { continue; }
+			Task task = task_queue.front();
+			task_queue.pop();
+			lock.unlock();
+			if (task.size > MMAP_SIZE_PER_THREAD - sizeof(Thread_Footer)) {
+				continue;
 			}
+			while (footer->ready.load()) {}
+			memcpy(target_data, task.data, task.size);
+			footer->object_id = task.object_id;
+			footer->packet_id = task.packet_id;
+			footer->offset = task.offset;
+			footer->size = task.size;
+			footer->ready.store(true);
 		}
 		// std::unique_lock<std::mutex> lock(*cout_mut);
 		// std::cout << sched_getcpu() << ",";
 		// lock.unlock();
 		// std::cout << "Thread " << thread << " running on  CPU " << sched_getcpu() << std::endl;
+	};
+
+	thread_receive = [this](std::atomic<bool> *stop_flag, size_t id){
+		void* source_data = mmap_ptr + (MMAP_SIZE_PER_THREAD * num_threads);
+		Thread_Footer* footer = (Thread_Footer*) (mmap_ptr + (MMAP_SIZE_PER_THREAD * (num_threads+1)) - sizeof(Thread_Footer));
+		while(!stop_flag->load()) {
+			// wait for footer ready
+			while(!footer->ready.load()) {}
+
+			// skip if object is not current target
+			if (cur_object_id.load() != footer->object_id) {
+				footer->ready.store(false);
+				continue;
+			}
+
+			memcpy(cur_object->data + footer->offset, source_data, footer->size);
+			std::unique_lock lock(obj_mtx);
+			cur_object->transferred_size += footer->size;
+			footer->ready.store(false);
+		}
 	};
 
 
@@ -124,8 +160,8 @@ void MMapConnection::setup(bool cleanInit = false, size_t num_threads_ = 1)
 	size_t cpu_binds[16] = {0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15};
 	
 	for (size_t i = 0; i < num_threads; i++) {
-		send_threads.emplace_back(std::make_unique<std::thread>(thread_worker, &stop_flag, num_threads));
-		receive_threads.emplace_back(std::make_unique<std::thread>(thread_worker, &stop_flag, num_threads));
+		send_threads.emplace_back(std::make_unique<std::thread>(thread_send, &stop_flag, i));
+		receive_threads.emplace_back(std::make_unique<std::thread>(thread_receive, &stop_flag, i));
 		
 		CPU_ZERO(&cpuset);
 		CPU_SET(cpu_binds[i], &cpuset);
@@ -158,140 +194,26 @@ void MMapConnection::cleanup()
 	}
 	// std::cout << "]," << std::endl;
 	munmap(header, sizeof(Header));
-	munmap(mmap_ptr, MMAP_FILESIZE);
+	munmap(mmap_ptr, MMAP_SIZE_PER_THREAD * num_threads);
 }
 
-void MMapConnection::send(void* data, size_t size, size_t num_threads = 1)
+void MMapConnection::send(DataObject* obj)
 {
-	// header->status = true;
-	// if (header->index >= HEADER_DAT_SIZE) {
-	// 	header->index=0;
-	// }
-	
-	// DataAccessEntry cur = header->DAT[header->index];
-	// uint64_t offset = cur.offset + cur.size;
+	uint64_t num_packets = obj->total_size / PACKET_SIZE;
+	uint64_t remainder = obj->total_size % PACKET_SIZE;
+	if (remainder != 0) { num_packets++; }
 
-	// if (offset + size > MMAP_FILESIZE) {
-	// 	// std::cout << "Filesize exceeded" << std::endl;
-	// 	header->index = 0;
-	// 	cur = header->DAT[header->index];
-	// 	offset = cur.offset + cur.size;
-	// 	return;
-	// }
-
-	// std::vector<std::thread> threads;
-	// size_t block_size = size / num_threads;
-	// size_t remainder = size % num_threads;
-
-	// auto thread_send = [](void* dest, void* data, size_t size) {
-	// 	memcpy(dest, data, size);
-	// };
-
-	// for (size_t i = 0; i < num_threads; i++) {
-	// 	size_t off = i * block_size;
-	// 	size_t cur_size = i == num_threads - 1 ? block_size + remainder : block_size;
-
-	// 	send_threads.emplace_back(thread_send, mmap_ptr + offset + off, data + off, cur_size);
-	// }
-
-	// for (auto& t : threads) {
-	// 	t.join();
-	// }
-	
-	// header->index++;
-	// header->DAT[header->index] = DataAccessEntry{offset, size};
-}
-
-void MMapConnection::completeMessage()
-{
-	std::unique_lock lock(queue_mtx);
-	if (task_queue.empty()) return;
-	Task cur = task_queue.front();
-	lock.unlock();
-	header->write_seq.store(cur.seq - 1);
-}
-
-void MMapConnection::completeAllMessages()
-{
-	while (!task_queue.empty())
-	{
+	for (uint64_t i = 0; i < num_packets; i++) {
+		uint64_t offset = PACKET_SIZE * i;
 		std::unique_lock lock(queue_mtx);
-		Task cur = task_queue.front();
-		lock.unlock();
-		while (cur.seq > header->write_seq.load())
-		{
-			header->write_seq.store(cur.seq);
-			lock.lock();
-			cur = task_queue.front();
-			lock.unlock();
-		}
-	}
-	if (task_queue.empty()) {
-		header->write_seq.store(local_write_seq);
-	}
-}
-
-void MMapConnection::send(void* data, size_t size)
-{
-	if (local_write_seq > header->write_seq.load()) {
-		completeMessage();
-	}
-
-	while ((local_write_seq + 1) % HEADER_DAT_SIZE == header->read_seq.load() % HEADER_DAT_SIZE) {
-		completeMessage();
-	}
-	uint64_t offset;
-	
-	if (local_write_seq % HEADER_DAT_SIZE == 0) {
-		offset = 0;
-	} else {
-		offset = header->DAT[(local_write_seq - 1) % HEADER_DAT_SIZE ].offset + header->DAT[(local_write_seq - 1) % HEADER_DAT_SIZE].size;
-	}
-
-	if (offset + size > MMAP_FILESIZE) {
-		// std::cerr << "Filesize exceeded" << std::endl;
-		offset = 0;
-	}
-	
-	size_t num_packets = size / PACKET_SIZE;
-	size_t remainder = size % PACKET_SIZE;
-
-	for (size_t i = 0; i < num_packets; i++) {
-		std::unique_lock lock(queue_mtx);
-		task_queue.push(Task {mmap_ptr + offset + (PACKET_SIZE*i), data + (PACKET_SIZE*i), PACKET_SIZE, local_write_seq});
+		task_queue.push(Task{obj->data + offset, (remainder != 0 ? PACKET_SIZE : remainder), obj->id, i, offset});
+		queue_cv.notify_one();
 		lock.unlock();
 	}
-	if (remainder != 0) {
-		std::unique_lock lock(queue_mtx);
-		task_queue.push(Task {mmap_ptr + offset + PACKET_SIZE*num_packets, data + PACKET_SIZE*num_packets, remainder, local_write_seq});
-		lock.unlock();
-	}
-
-	
-	header->DAT[local_write_seq % HEADER_DAT_SIZE] = {offset, size, false};
-	local_write_seq++;
 }
 
-void* MMapConnection::receive(void* receive_buffer_)
-{	
-	receive_buffer = (char*) receive_buffer_;
-
-	DataAccessEntry cur = header->DAT[header->read_seq.load() % HEADER_DAT_SIZE];
-
-	size_t num_packets = cur.size / PACKET_SIZE;
-	size_t remainder = cur.size % PACKET_SIZE;
-
-	for (size_t i = 0; i < num_packets; i++) {
-		std::unique_lock lock(queue_mtx);
-		task_queue.push(Task {receive_buffer + (PACKET_SIZE*i), mmap_ptr + cur.offset + (PACKET_SIZE*i), PACKET_SIZE, header->read_seq.load()});
-		lock.unlock();
-	}
-	std::unique_lock lock(queue_mtx);
-	task_queue.push(Task {receive_buffer + PACKET_SIZE*num_packets, mmap_ptr + cur.offset + PACKET_SIZE*num_packets, remainder, header->read_seq.load()});
-	lock.unlock();
-
-	while(!task_queue.empty()) {}
-
-	header->read_seq.fetch_add(1);
-	return receive_buffer;
+void* MMapConnection::receive(DataObject* object)
+{
+	cur_object = object;
+	cur_object_id.store(object->id);
 }

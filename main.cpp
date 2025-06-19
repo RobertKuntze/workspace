@@ -96,7 +96,7 @@ int main(int argc, char* argv[]) {
 
 	if(mode == "sbt") {
 		con->setup(true, num_threads);
-		bench.sendBandwidthTotalSizeTest(msg_size, total_size);
+		bench.sendBandwidthTotalSizeTest(total_size);
 	}
 
 	if(mode == "rb") {
