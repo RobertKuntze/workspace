@@ -80,12 +80,12 @@ void MMapConnection::setup(bool cleanInit = false, size_t num_threads_ = 1)
 
 	thread_send = [this](std::atomic<bool> *stop_flag, size_t id){
 		// std::cout << "Thread " << thread << " started" << std::endl;
-		void* target_data = mmap_ptr + (MMAP_SIZE_PER_THREAD * num_threads);
-		Thread_Footer* footer = (Thread_Footer*) (mmap_ptr + (MMAP_SIZE_PER_THREAD * (num_threads+1)) - sizeof(Thread_Footer));
+		void* target_data = mmap_ptr + (MMAP_SIZE_PER_THREAD * id);
+		Thread_Footer* footer = (Thread_Footer*) (mmap_ptr + (MMAP_SIZE_PER_THREAD * (id+1)) - sizeof(Thread_Footer));
 		// new (footer) Thread_Footer;
 		while (!stop_flag->load()) {
 			std::unique_lock lock(queue_mtx);
-			queue_cv.wait(lock);
+			queue_cv.wait(lock, [&]() { return !footer->ready.load() || stop_flag->load(); });
 			if (task_queue.empty()) { continue; }
 			Task task = task_queue.front();
 			task_queue.pop();
@@ -108,14 +108,23 @@ void MMapConnection::setup(bool cleanInit = false, size_t num_threads_ = 1)
 	};
 
 	thread_receive = [this](std::atomic<bool> *stop_flag, size_t id){
-		void* source_data = mmap_ptr + (MMAP_SIZE_PER_THREAD * num_threads);
-		Thread_Footer* footer = (Thread_Footer*) (mmap_ptr + (MMAP_SIZE_PER_THREAD * (num_threads+1)) - sizeof(Thread_Footer));
+		void* source_data = mmap_ptr + (MMAP_SIZE_PER_THREAD * id);
+		Thread_Footer* footer = (Thread_Footer*) (mmap_ptr + (MMAP_SIZE_PER_THREAD * (id+1)) - sizeof(Thread_Footer));
 		while(!stop_flag->load()) {
+			while(!object_ready.load()) {
+				if (stop_flag->load()) {
+					return;
+				}
+			}
 			// wait for footer ready
-			while(!footer->ready.load()) {}
+			while(!footer->ready.load()) {
+				if (stop_flag->load()) {
+					return;
+				}
+			}
 
 			// skip if object is not current target
-			if (cur_object_id.load() != footer->object_id) {
+			if (cur_object_id != footer->object_id) {
 				footer->ready.store(false);
 				continue;
 			}
@@ -182,15 +191,14 @@ void MMapConnection::cleanup()
 {
 	stop_flag = true;
 	// std::cout << "\"send_cpus\" : [";
-	for (size_t i = 0; i < cv_s.size(); i++) {
-		cv_s[i]->notify_all();
-		send_threads[i]->join();
-	}
-	// std::cout << "]," << std::endl;
-	// std::cout << "\"receive_cpus\" : [";
-	for (size_t i = 0; i < cv_r.size(); i++) {
-		cv_r[i]->notify_all();
-		receive_threads[i]->join();
+	queue_cv.notify_all();
+	for (size_t i = 0; i < num_threads; i++) {
+		if (send_threads[i]->joinable()) {
+			send_threads[i]->join();
+		}
+		if (receive_threads[i]->joinable()) {
+			receive_threads[i]->join();
+		}
 	}
 	// std::cout << "]," << std::endl;
 	munmap(header, sizeof(Header));
@@ -206,14 +214,29 @@ void MMapConnection::send(DataObject* obj)
 	for (uint64_t i = 0; i < num_packets; i++) {
 		uint64_t offset = PACKET_SIZE * i;
 		std::unique_lock lock(queue_mtx);
-		task_queue.push(Task{obj->data + offset, (remainder != 0 ? PACKET_SIZE : remainder), obj->id, i, offset});
+		task_queue.push(Task{obj->data + offset, (remainder == 0 ? PACKET_SIZE : remainder), obj->id, i, offset});
 		queue_cv.notify_one();
 		lock.unlock();
 	}
+
+	while(1)
+	{
+		std::unique_lock lock(queue_mtx);
+		if (task_queue.empty()) {
+			lock.unlock();
+			break;
+		}
+		lock.unlock();
+		queue_cv.notify_all();
+		std::this_thread::sleep_for(std::chrono::milliseconds(1));
+	}
 }
 
-void* MMapConnection::receive(DataObject* object)
+void MMapConnection::receive(DataObject* object)
 {
+	std::unique_lock lock(obj_mtx);
 	cur_object = object;
-	cur_object_id.store(object->id);
+	lock.unlock();
+	cur_object_id = object->id;
+	object_ready.store(true);
 }

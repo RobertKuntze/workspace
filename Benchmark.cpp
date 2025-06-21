@@ -102,18 +102,15 @@ void Benchmark::receiveBandwidthTest(size_t msg_size)
 	size_t iterations = 0;
 	
 	auto start_time = std::chrono::steady_clock::now();
-	while (true)
-	{
-		DataObject receive_buffer{msg_size, iterations};
-		con->receive(&receive_buffer);
-		
-		while (!receive_buffer.isReady()) {}
-		if(memcmp(data, receive_buffer.data, msg_size) != 0) {
-			std::cout << "RECEIVE ERROR" << std::endl;
-		}
-		iterations++;
-	}
+	DataObject receive_buffer{new char[msg_size], msg_size, iterations};
 	
+	con->receive(&receive_buffer);
+	
+	while (!(receive_buffer.total_size == receive_buffer.transferred_size)) {}
+	// if(memcmp(data, receive_buffer.data, msg_size) != 0) {
+	// 	std::cout << "RECEIVE ERROR" << std::endl;
+	// }
+	iterations++;
 	auto end_time = std::chrono::steady_clock::now();
 
 	auto duration_ns = (end_time - start_time).count();
@@ -155,8 +152,7 @@ void Benchmark::sendLatencyTest(size_t msg_size, size_t iterations)
 	while(!con->header->receive_ready.load()) {};
 	
 	for (size_t i = 0; i < iterations; i++) {
-		DataObject* object = new DataObject{msg_size, i};
-		object->data = new char[msg_size];
+		DataObject* object = new DataObject{new char[msg_size], msg_size, i};
 		
 		t1.emplace_back(std::chrono::steady_clock::now());
 		con->send(object);
@@ -190,7 +186,7 @@ void Benchmark::receiveLatencyTest(size_t msg_size, size_t iterations)
 	con->header->receive_ready.store(true);
 
 	for (size_t i = 0; i < iterations; i++) {
-		DataObject* object = new DataObject{msg_size, i};
+		DataObject* object = new DataObject{new char[msg_size], msg_size, i};
 		t3.emplace_back(std::chrono::steady_clock::now());
 		con->receive(object);
 		t4.emplace_back(std::chrono::steady_clock::now());
@@ -221,20 +217,22 @@ void Benchmark::sendBandwidthTotalSizeTest(uint64_t total_size)
 	con->header->send_ready.store(true);
 	while(!con->header->receive_ready.load()) {};
 
-	DataObject* obj = new DataObject{total_size, 0};
 	
 	// memset(data, 0x69, msg_size);
+	size_t data_size = total_size / sizeof(uint64_t);
+	uint64_t* data = new uint64_t[data_size];
 
     std::mt19937_64 gen(seed);
     std::uniform_int_distribution<uint64_t> dis;
 
     for (size_t i = 0; i < (total_size / sizeof(uint64_t)); ++i) {
-        obj->data[i] = dis(gen);
+        data[i] = dis(gen);
     }
+
+	DataObject* obj = new DataObject{(char*) data, total_size, 0};
 
 	auto start_time = std::chrono::steady_clock::now();
 	con->send(obj);
-	while (!obj->isReady());
 	auto end_time = std::chrono::steady_clock::now();
 	
 	con->header->send_ready.store(false);

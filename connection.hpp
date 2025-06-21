@@ -36,16 +36,14 @@ struct Header {
 };
 
 struct DataObject {
-	char* data;
+	char* data = nullptr;
 
-	uint64_t total_size;
-	uint64_t transferred_size;
-	uint64_t id;
+	uint64_t total_size = 0;
+	uint64_t transferred_size = 0;
+	uint64_t id = 0;
 
-	DataObject(uint64_t _total_size, uint64_t _id) : id(_id), total_size(_total_size), transferred_size(0)
-	{
-		data = (char*) malloc(total_size);
-	}
+	DataObject(char* _data, uint64_t _total_size, uint64_t _id) : data(_data), id(_id), total_size(_total_size), transferred_size(0)
+	{}
 
 	bool isReady()
 	{
@@ -58,7 +56,10 @@ struct Thread_Footer {
 	uint64_t packet_id;
 	uint64_t offset;
 	uint64_t size;
-	std::atomic<bool> ready{false};
+	std::atomic<bool> ready;
+
+	Thread_Footer() : object_id(0), packet_id(0), offset(0), size(0), ready(false) {}
+	~Thread_Footer() = default;
 };
 
 struct Task {
@@ -74,7 +75,7 @@ class Connection
 public:
 	// virtual void send(void* data, size_t size) = 0;
 	virtual void send(DataObject* object) = 0;
-	virtual void* receive(DataObject* object) = 0;
+	virtual void receive(DataObject* object) = 0;
 	virtual void setup(bool cleanInit, size_t num_threads) = 0;
 	virtual void cleanup() = 0;
 	virtual ~Connection() = default;
@@ -85,7 +86,7 @@ class MMapConnection : public Connection
 public:
 	// void send(void* data, size_t size);
 	void send(DataObject* object);
-	void* receive(DataObject* object);
+	void receive(DataObject* object);
 	void setup(bool cleanInit, size_t num_threads);
 	void initHeader();
 	// void initMMap();
@@ -124,7 +125,8 @@ public:
 	std::mutex queue_mtx;
 	std::condition_variable queue_cv;
 
-	std::atomic<uint64_t> cur_object_id;
+	std::atomic<bool> object_ready{false};
+	uint64_t cur_object_id;
 	DataObject* cur_object;
 	std::mutex obj_mtx;
 
